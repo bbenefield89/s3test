@@ -1,3 +1,6 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+
 Parameters:
   BranchName:
     Description: GitHub branch name
@@ -46,7 +49,6 @@ Resources:
       Handler: index.handler
       Runtime: "nodejs12.x"
       Role: !GetAtt TestCfnLambdaFunctionServiceRole.Arn
-    # DependsOn: TestCfnLambdaFunctionServiceRole
 
   TestCfnLambdaCallback:
     Type: AWS::Lambda::Function
@@ -59,7 +61,70 @@ Resources:
       Handler: index.handler
       Runtime: "nodejs12.x"
       Role: !GetAtt TestCfnLambdaFunctionServiceRole.Arn
-    # DependsOn: TestCfnLambdaFunctionServiceRole
+
+  ##
+   # API Gateways
+   ##
+  TestCfnLambdaAuthApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs12.x
+      CodeUri: .
+      Events:
+        List:
+          Type: Api
+          Properties:
+            Path: /auth
+            Method: GET
+
+  TestCfnLambdaCallbackApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs12.x
+      CodeUri: .
+      Events:
+        List:
+          Type: Api
+          Properties:
+            Path: /callback
+            Method: GET
+   
+  # TestCfnLambdaApiGateway:
+  #   Type: AWS::ApiGateway::RestApi
+  #   Properties:
+  #     Name: "TestCfnLambdaApiGateway"
+
+  # TestCfnLambdaApiGatewayAuthResource:
+  #   Type: AWS::ApiGateway::Resource
+  #   Properties:
+  #     RestApiId: !Ref TestCfnLambdaApiGateway
+  #     ParentId: !GetAtt TestCfnLambdaApiGateway.RootResourceId
+  #     PathPart: "auth"
+
+  # TestCfnLambdaApiGatewayCallbackResource:
+  #   Type: AWS::ApiGateway::Resource
+  #   Properties:
+  #     RestApiId: !Ref TestCfnLambdaApiGateway
+  #     ParentId: !GetAtt TestCfnLambdaApiGateway.RootResourceId
+  #     PathPart: "callback"
+
+  # TestCfnLambdaApiGatewayAuthMethod:
+  #   Type: AWS::ApiGateway::Method
+  #   Properties:
+  #     AuthorizationType: "NONE"
+  #     HttpMethod: "GET"
+  #     ResourceId: !Ref TestCfnLambdaApiGatewayAuthResource
+  #     RestApiId: !Ref TestCfnLambdaApiGateway
+
+  # TestCfnLambdaApiGatewayCallbackMethod:
+  #   Type: AWS::ApiGateway::Method
+  #   Properties:
+  #     AuthorizationType: "NONE"
+  #     HttpMethod: "GET"
+  #     ResourceId: !Ref TestCfnLambdaApiGatewayCallbackResource
+  #     RestApiId: !Ref TestCfnLambdaApiGateway
 
   ##
    # CodeBuilds
