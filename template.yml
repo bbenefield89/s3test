@@ -131,7 +131,7 @@ Resources:
                 Owner: !Ref GitHubOwner
                 Repo: !Ref RepositoryName
                 Branch: !Ref BranchName
-                OAuthToken: b61bf4a39e387cd96fca811b7283f199a40fd8e9
+                OAuthToken: 73562fc2772239ff4d56bcc80d9d516d6d3a6d8b
                 PollForSourceChanges: false
               RunOrder: 1
         - Name: Build
@@ -156,7 +156,7 @@ Resources:
     Properties:
       Authentication: GITHUB_HMAC
       AuthenticationConfiguration:
-        SecretToken: b61bf4a39e387cd96fca811b7283f199a40fd8e9
+        SecretToken: 73562fc2772239ff4d56bcc80d9d516d6d3a6d8b
       Filters:
         - JsonPath: $.ref
           MatchEquals: "refs/heads/{Branch}"
