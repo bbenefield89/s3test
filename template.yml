@@ -94,7 +94,8 @@ Resources:
                 - echo PreBuild Finished
                 - echo Build Starting
                 - ls -la
-                - zip -r ../build.zip .
+                - zip -r ../build.zip . && aws lambda update-function-code --function-name ${TestCfnLambdaAuth} --zip-file fileb://$PWD/../build.zip
+                - zip -r ../build.zip . && aws lambda update-function-code --function-name ${TestCfnLambdaCallback} --zip-file fileb://$PWD/../build.zip
                 - ls -la ../
 
             post_build:
@@ -179,8 +180,6 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action: "sts:AssumeRole"
-      # Policies:
-      # - PolicyName: "TestCfnLambdaFunctionServiceRolePolicyName"
 
   TestCfnLambdaBuildServiceRole:
     Type: AWS::IAM::Role
@@ -226,6 +225,10 @@ Resources:
                   - ''
                   - - !GetAtt TestCfnLambdaOutputS3.Arn
                     - '/*'
+            - Effect: Allow
+              Action:
+                - 'lambda:*'
+              Resource: "*"
 
   TestCfnLambdaCodePipelineServiceRole:
     Type: "AWS::IAM::Role"
