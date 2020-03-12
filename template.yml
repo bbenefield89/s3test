@@ -1,0 +1,299 @@
+Parameters:
+  BranchName:
+    Description: GitHub branch name
+    Type: String
+    Default: master
+  RepositoryName:
+    Description: GitHub repository name
+    Type: String
+    Default: s3test
+  GitHubOwner:
+    Type: String
+    Default: bbenefield89
+  ApplicationName:
+    Description: CodeDeploy application name
+    Type: String
+    Default: DemoApplication
+  BetaFleet:
+    Description: Fleet configured in CodeDeploy
+    Type: String
+    Default: DemoFleet
+
+##
+ # Resources
+ ##
+Resources:
+  ##
+   # S3 Buckets
+   ##
+  TestCfnLambdaPipelineS3:
+    Type: AWS::S3::Bucket
+
+  TestCfnLambdaOutputS3:
+    Type: AWS::S3::Bucket
+
+  ##
+   # Lambdas
+   ##
+  TestCfnLambdaAuth:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          exports.handler = function (event, context) {
+            return "TestCfnLambdaAuth"
+          }
+      Handler: index.handler
+      Runtime: "nodejs12.x"
+      Role: !GetAtt TestCfnLambdaFunctionServiceRole.Arn
+    # DependsOn: TestCfnLambdaFunctionServiceRole
+
+  TestCfnLambdaCallback:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          exports.handler = function (event, context) {
+            return "TestCfnLambdaCallback"
+          }
+      Handler: index.handler
+      Runtime: "nodejs12.x"
+      Role: !GetAtt TestCfnLambdaFunctionServiceRole.Arn
+    # DependsOn: TestCfnLambdaFunctionServiceRole
+
+  ##
+   # CodeBuilds
+   ##
+  TestCfnLambdaBuild:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: "TestCfnLambdaBuild"
+      Artifacts:
+        Type: "CODEPIPELINE"
+      Environment:
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:2.0"
+        Type: "LINUX_CONTAINER"
+      ServiceRole: !Ref TestCfnLambdaBuildServiceRole
+      Source:
+        Type: "CODEPIPELINE"
+        BuildSpec: !Sub |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                - echo Install Starting
+            
+            pre_build:
+              commands:
+                - echo Install Finished
+                - echo PreBuild Starting
+            
+            build:
+              commands:
+                - echo PreBuild Finished
+                - echo Build Starting
+                - ls -la
+                - zip -r ../build.zip .
+                - ls -la ../
+
+            post_build:
+              commands:
+                - echo Build Finished
+                - echo PostBuild Starting
+
+          artifacts:
+            files:
+              - index.html
+
+  ##
+   # CodePipelines
+   ##
+  TestCfnLambdaPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref TestCfnLambdaPipelineS3
+        Type: S3
+      RoleArn: !GetAtt TestCfnLambdaCodePipelineServiceRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref RepositoryName
+                Branch: !Ref BranchName
+                OAuthToken: b61bf4a39e387cd96fca811b7283f199a40fd8e9
+                PollForSourceChanges: false
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref TestCfnLambdaBuild
+              RunOrder: 2
+
+  ##
+   # CodePipeline Webhooks
+   ##
+  TestCfnLambdaPipelineWebhook:
+    Type: "AWS::CodePipeline::Webhook"
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: b61bf4a39e387cd96fca811b7283f199a40fd8e9
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: "refs/heads/{Branch}"
+      TargetPipeline: !Ref TestCfnLambdaPipeline
+      TargetAction: SourceAction
+      TargetPipelineVersion: !GetAtt TestCfnLambdaPipeline.Version
+      RegisterWithThirdParty: true
+
+  ##
+   # IAM Roles
+   ##
+  TestCfnLambdaFunctionServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+      # Policies:
+      # - PolicyName: "TestCfnLambdaFunctionServiceRolePolicyName"
+
+  TestCfnLambdaBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # RoleName: !Sub '${AWS::StackName}-DEPLOYPROJECT-ROLE-${pEnv}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [codebuild.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Policies:
+        # PolicyName: !Sub '${AWS::StackName}-DEPLOYPROJECT-POLICY-${pEnv}'
+      - PolicyName: "TestCfnLambdaBuildServiceRolePolicyName"
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'logs:CreateLogGroup'
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+                - 'logs:DescribeLogStreams'
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - 's3:PutObject'
+                - 's3:ListObjects'
+                - 's3:GetObject'
+                - 's3:ListBucket'
+              Resource:
+                - !GetAtt TestCfnLambdaPipelineS3.Arn
+                - !Join
+                  - ''
+                  - - !GetAtt TestCfnLambdaPipelineS3.Arn
+                    - '/*'
+            - Effect: Allow
+              Action:
+                - 's3:PutObject'
+              Resource:
+                - !GetAtt TestCfnLambdaOutputS3.Arn
+                - !Join
+                  - ''
+                  - - !GetAtt TestCfnLambdaOutputS3.Arn
+                    - '/*'
+
+  TestCfnLambdaCodePipelineServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: AWS-CodePipeline-Service-3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:UploadArchive"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "codedeploy:CreateDeployment"
+                  - "codedeploy:GetApplicationRevision"
+                  - "codedeploy:GetDeployment"
+                  - "codedeploy:GetDeploymentConfig"
+                  - "codedeploy:RegisterApplicationRevision"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "devicefarm:ListProjects"
+                  - "devicefarm:ListDevicePools"
+                  - "devicefarm:GetRun"
+                  - "devicefarm:GetUpload"
+                  - "devicefarm:CreateUpload"
+                  - "devicefarm:ScheduleRun"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                  - "lambda:ListFunctions"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "elasticbeanstalk:*"
+                  - "ec2:*"
+                  - "elasticloadbalancing:*"
+                  - "autoscaling:*"
+                  - "cloudwatch:*"
+                  - "s3:*"
+                  - "sns:*"
+                  - "cloudformation:*"
+                  - "rds:*"
+                  - "sqs:*"
+                  - "ecs:*"
+                Resource: "*"
